@@ -310,6 +310,153 @@ export function 合成(材料表 = {}, 配方 = {}) {
   return { 可以: true, 得到: 配方.产出, 剩余: 材料表 };
 }
 
+/* ════════ E13 持续状态（增益/减益 + 冷却）════════
+   跨题材压力测试测出来的最宽通用面：武侠的毒、仙侠的丹毒、
+   火影的幻术、魔兽的光环、哈利波特的昏昏倒地 —— 全是这一个机制。
+*/
+export function 挂上(身上 = {}, 定义 = {}) {
+  if (!定义.id) return { 可以: false, 原因: '没有这个状态' };
+  const 上限 = Number(定义.层数上限) || 1;
+  const 条 = 身上[定义.id];
+  if (条) {
+    条.层 = Math.min(上限, (Number(条.层) || 1) + 1);
+    条.剩 = Number(定义.时长) || 条.剩;
+    return { 可以: true, 叠到: 条.层, 剩: 条.剩 };
+  }
+  身上[定义.id] = { 名: 定义.名 || 定义.id, 类型: 定义.类型 || '减益', 剩: Number(定义.时长) || 1, 层: 1 };
+  return { 可以: true, 挂上: 定义.id, 剩: 身上[定义.id].剩 };
+}
+export function 撤掉(身上 = {}, id) {
+  if (!(id in 身上)) return { 可以: false, 原因: '身上没有这个状态' };
+  delete 身上[id];
+  return { 可以: true, 撤了: id };
+}
+export function 有没有(身上 = {}, id) { return !!身上[id]; }
+export function 几层(身上 = {}, id) { const 条 = 身上[id]; return 条 ? (Number(条.层) || 1) : 0; }
+export function 过一回合(身上 = {}, 定义表 = [], 值表 = {}) {
+  const 定 = {}; for (const x of 定义表) 定[x.id] = x;
+  const 报 = { 结算: [], 到期: [] };
+  for (const id in 身上) {                       // ① 先结算每回合作用
+    const 条 = 身上[id], d = 定[id] || {}, 层 = Number(条.层) || 1;
+    for (const k in (d.每回合 || {})) {
+      const 量 = (Number(d.每回合[k]) || 0) * 层;
+      值表[k] = (Number(值表[k]) || 0) + 量;
+      报.结算.push({ 状态: id, 字段: k, 量 });
+    }
+  }
+  for (const id in 身上) {                       // ② 再减时长（反了会「刚挂上就咬一口」）
+    const 条 = 身上[id];
+    if (条.剩 !== undefined) 条.剩 = (Number(条.剩) || 0) - 1;
+    if (Number(条.剩) <= 0) { 报.到期.push(id); delete 身上[id]; }
+  }
+  return 报;
+}
+export function 状态倍率(身上 = {}, 定义表 = []) {
+  const 定 = {}; for (const x of 定义表) 定[x.id] = x;
+  const 倍 = {};
+  for (const id in 身上) {
+    const d = 定[id] || {}, 层 = Number(身上[id].层) || 1;
+    for (const k in (d.改派生 || {})) {
+      const m = 1 + ((Number(d.改派生[k]) || 1) - 1) * 层;
+      倍[k] = (Number(倍[k]) || 1) * m;
+    }
+  }
+  return 倍;
+}
+export function 应用倍率(派生值 = {}, 倍率 = {}) {
+  const 出 = {};
+  for (const k in 派生值) { const m = Number(倍率[k]); 出[k] = (Number(派生值[k]) || 0) * (isNaN(m) ? 1 : m); }
+  return 出;
+}
+export function 概率修正(身上 = {}, 定义表 = []) {
+  const 定 = {}; for (const x of 定义表) 定[x.id] = x;
+  let 加 = 0;
+  for (const id in 身上) 加 += (Number((定[id] || {}).改概率) || 0) * (Number(身上[id].层) || 1);
+  return 加;
+}
+export function 进冷却(身上 = {}, 技能id, 回合数) {
+  return 挂上(身上, { id: '__cd_' + 技能id, 名: '冷却：' + 技能id, 类型: '减益', 时长: Number(回合数) || 1 });
+}
+export function 在冷却(身上 = {}, 技能id) { return 有没有(身上, '__cd_' + 技能id); }
+export function 冷却剩(身上 = {}, 技能id) { const 条 = 身上['__cd_' + 技能id]; return 条 ? (Number(条.剩) || 0) : 0; }
+export function 状态快照(身上 = {}) {
+  const 行 = [];
+  for (const id in 身上) {
+    if (String(id).indexOf('__cd_') === 0) continue;
+    const 条 = 身上[id];
+    行.push(条.名 + (Number(条.层) > 1 ? '×' + 条.层 : '') + '(' + 条.剩 + ')');
+  }
+  return 行.join('　');
+}
+
+/* ════════ E14 相克关系（矩阵）════════ */
+export function 相克(矩 = {}, 攻方, 守方) {
+  let 默 = Number(矩.默认); if (isNaN(默)) 默 = 1;
+  if (矩.值) { const 行 = 矩.值[攻方]; return (行 && 行[守方] !== undefined) ? (Number(行[守方]) || 默) : 默; }
+  for (const x of (矩.表 || [])) if (x.攻 === 攻方 && x.守 === 守方) return Number(x.倍率) || 默;
+  return 默;
+}
+export function 相克全表(矩 = {}, 键表) {
+  const 键 = 键表 || 矩.键 || [], 出 = [];
+  for (let i = 0; i < 键.length; i++) for (let j = 0; j < 键.length; j++) {
+    if (i === j) continue;
+    出.push({ 攻: 键[i], 守: 键[j], 倍率: 相克(矩, 键[i], 键[j]) });
+  }
+  return 出;
+}
+export function 克我的(矩, 键表, 我) { return 相克全表(矩, 键表).filter((x) => x.守 === 我 && x.倍率 > 1).map((x) => x.攻); }
+export function 我克的(矩, 键表, 我) { return 相克全表(矩, 键表).filter((x) => x.攻 === 我 && x.倍率 > 1).map((x) => x.守); }
+export function 相克自检(矩 = {}, 键表) {
+  const 键 = 键表 || 矩.键 || [];
+  const 错 = 键.filter((k) => Math.abs(相克(矩, k, k) - 1) > 1e-9).map((k) => ({ 键: k, 自克: 相克(矩, k, k) }));
+  return { 有没有错: 错.length > 0, 错 };
+}
+
+/* ════════ C7 施展条件与代价（「会」和「能用」是两件事）════════ */
+export function 能学吗(定义 = {}) {
+  return 定义.先天 ? { 可以: false, 原因: '这个学不了，是天生的' } : { 可以: true };
+}
+export function 能用吗(定义 = {}, 值表 = {}, 身上 = {}) {
+  const 缺 = [];
+  for (const c of (定义.条件 || [])) {
+    if (c.类型 === '有状态') { if (!身上[c.状态]) 缺.push('要处在「' + c.状态 + '」里才能用'); }
+    else if (c.类型 === '没状态') { if (身上[c.状态]) 缺.push('带着「' + c.状态 + '」时用不了'); }
+    else if (c.类型 === '资源够' || c.类型 === '字段够') {
+      const 现 = Number(值表[c.字段]) || 0, 要 = Number(c.至少) || 0;
+      if (现 < 要) 缺.push(c.字段 + ' 还差 ' + (要 - 现));
+    }
+  }
+  return { 可以: 缺.length === 0, 缺 };
+}
+export function 用得起吗(定义 = {}, 值表 = {}) {
+  const 缺 = [];
+  for (const k in (定义.代价 || {})) {
+    const 现 = Number(值表[k]) || 0, 要 = Number(定义.代价[k]) || 0;
+    if (现 < 要) 缺.push({ 字段: k, 现, 需: 要 });
+  }
+  return { 可以: 缺.length === 0, 缺 };
+}
+export function 放得出吗(定义 = {}, 值表 = {}, 身上 = {}) {
+  const 能 = 能用吗(定义, 值表, 身上);
+  if (!能.可以) return { 可以: false, 因为: '条件不到', 缺: 能.缺 };
+  const 付 = 用得起吗(定义, 值表);
+  if (!付.可以) return { 可以: false, 因为: '付不起代价', 缺: 付.缺.map((x) => x.字段 + ' 还差 ' + (x.需 - x.现)) };
+  return { 可以: true };
+}
+export function 付代价(定义 = {}, 值表 = {}) {
+  const r = 用得起吗(定义, 值表);
+  if (!r.可以) return r;
+  for (const k in (定义.代价 || {})) 值表[k] = (Number(值表[k]) || 0) - Number(定义.代价[k]);
+  return { 可以: true, 扣了: 定义.代价 };
+}
+export function 施展(定义 = {}, 值表 = {}, 身上 = {}, 冷却回合) {
+  const r = 放得出吗(定义, 值表, 身上);
+  if (!r.可以) return r;
+  付代价(定义, 值表);
+  if (冷却回合) 进冷却(身上, 定义.id, 冷却回合);
+  return { 可以: true, 放了: 定义.id };
+}
+
 /* ════════ NPC 参战派生（从战力档位推）════════
    ★ 这是**标定**，不是原作数据 —— 原作只给了「战力」一个数。
    映射的依据是让档位与武功等级大致对齐（100 档 ≈ 三十级，1000 档 ≈ 一百一十级）。
