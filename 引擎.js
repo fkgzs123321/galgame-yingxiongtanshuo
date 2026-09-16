@@ -457,6 +457,63 @@ export function 施展(定义 = {}, 值表 = {}, 身上 = {}, 冷却回合) {
   return { 可以: true, 放了: 定义.id };
 }
 
+/* ════════ C6-b 改图（玩家自定义生成 · 参考色色灵感状态栏的天赋树）════════
+   ★★ 顺序不能错：校验 → 算代价 → 付得起吗 → 改副本 → 落盘成功 → 才扣代价
+   反过来会出现「钱扣了但图没改成功」—— 那是事务错，不是算术错。
+*/
+export function 校验改动(图 = {}, 改动 = {}) {
+  const n = 图.节点 || [], d = 改动;
+  const 有 = {}; for (const x of n) 有[x.id] = x;
+  if (d.动作 === '加节点') {
+    if (!d.节点 || !d.节点.id) return { 合法: false, 原因: '没给节点' };
+    if (有[d.节点.id]) return { 合法: false, 原因: '这个 id 已经有了' };
+    for (const x of (d.节点.前置 || [])) if (!有[x] && x !== d.节点.id) return { 合法: false, 原因: '前置不存在：' + x };
+    return { 合法: true };
+  }
+  if (d.动作 === '删节点') {
+    if (!有[d.id]) return { 合法: false, 原因: '没有这个节点' };
+    const 靠 = n.filter((x) => (x.前置 || []).indexOf(d.id) >= 0).map((x) => x.id);
+    if (靠.length) return { 合法: false, 原因: '还有东西依赖它', 依赖: 靠 };
+    return { 合法: true };
+  }
+  if (d.动作 === '改门槛') {
+    if (!有[d.id]) return { 合法: false, 原因: '没有这个节点' };
+    return { 合法: true };
+  }
+  return { 合法: false, 原因: '不认这个动作：' + d.动作 };
+}
+export function 算改动代价(改动 = {}, 代价表 = {}, 已改次数 = 0) {
+  const 基 = (代价表.动作 || {})[改动.动作] || {};
+  const 倍 = 1 + (Number(代价表.每次递增) || 0) * (Number(已改次数) || 0);
+  const 出 = {};
+  for (const k in 基) 出[k] = Math.ceil((Number(基[k]) || 0) * 倍);
+  return 出;
+}
+export function 落图(图 = {}, 改动 = {}) {
+  const 新 = JSON.parse(JSON.stringify(图.节点 ? 图 : { 节点: [] }));
+  const n = 新.节点;
+  if (改动.动作 === '加节点') { n.push(改动.节点); return { 可以: true, 图: 新 }; }
+  if (改动.动作 === '删节点') { const i = n.findIndex((x) => x.id === 改动.id); if (i >= 0) n.splice(i, 1); return { 可以: true, 图: 新 }; }
+  if (改动.动作 === '改门槛') { const x = n.find((y) => y.id === 改动.id); if (x) x.需要 = 改动.需要 || x.需要; return { 可以: true, 图: 新 }; }
+  return { 可以: false, 原因: '不认这个动作' };
+}
+export function 改图(图 = {}, 改动 = {}, 代价表 = {}, 值表 = {}, 已改次数 = 0) {
+  const 校 = 校验改动(图, 改动);
+  if (!校.合法) return { 可以: false, 在哪一步: '校验', 原因: 校.原因, 依赖: 校.依赖 };
+  const 代 = 算改动代价(改动, 代价表, 已改次数);
+  const 付 = canAfford(代, 值表);
+  if (!付.可以) return { 可以: false, 在哪一步: '付代价', 缺: 付.缺, 要: 代 };
+  const 落 = 落图(图, 改动);                       // ★ 先在副本上落盘
+  if (!落.可以) return { 可以: false, 在哪一步: '落盘', 原因: 落.原因 };
+  for (const k in 代) 值表[k] = (Number(值表[k]) || 0) - Number(代[k]);   // 落盘成功才扣
+  const 环 = 有没有环(落.图);                      // ★ 落盘后自检，坏了就退费
+  if (环.有环) {
+    for (const k in 代) 值表[k] = (Number(值表[k]) || 0) + Number(代[k]);
+    return { 可以: false, 在哪一步: '自检', 原因: '改完出现环，费用已退回', 环在: 环.在哪 };
+  }
+  return { 可以: true, 图: 落.图, 花了: 代, 改了几次: (Number(已改次数) || 0) + 1 };
+}
+
 /* ════════ NPC 参战派生（从战力档位推）════════
    ★ 这是**标定**，不是原作数据 —— 原作只给了「战力」一个数。
    映射的依据是让档位与武功等级大致对齐（100 档 ≈ 三十级，1000 档 ≈ 一百一十级）。
