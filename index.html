@@ -14,8 +14,7 @@
 html,body{margin:0;padding:0;background:transparent}
 .wrap{
   font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
-  color:var(--ink);
-  font-size:13px; line-height:1.65;
+  color:var(--ink); font-size:13px; line-height:1.65;
   border:1px solid var(--line); border-radius:12px;
   background:linear-gradient(180deg,var(--bg1),var(--bg0));
   padding:13px 15px; margin:8px 0;
@@ -45,8 +44,44 @@ html,body{margin:0;padding:0;background:transparent}
 .line b{font-weight:500; color:var(--ink)}
 .dimline{color:var(--dim)}
 .empty{color:var(--faint); font-size:12px}
+h5{margin:0 0 7px; font-size:12px; font-weight:500; letter-spacing:.06em; color:var(--dim); display:flex; justify-content:space-between; align-items:baseline}
+h5 .r{color:var(--gold); font-size:11.5px; letter-spacing:0}
+.opts{display:flex; flex-direction:column; gap:5px}
+.opt{border:1px solid var(--line); border-radius:8px; padding:6px 9px; cursor:pointer; transition:.15s; background:var(--bg2)}
+.opt .row1{display:flex; align-items:baseline; gap:8px}
+.opt .no{color:var(--faint); font-size:11px; min-width:12px}
+.opt .tx{flex:1}
+.opt .lv{font-size:11px; color:var(--dim); white-space:nowrap}
+.opt .feel{font-size:11.5px; color:var(--faint); margin-top:3px; padding-left:20px}
+.opt:hover{border-color:var(--dim)}
+.opt.sel{border-color:var(--gold); background:rgba(232,184,75,.07)}
+.opt.lv-微{border-left:2px solid var(--grn)}
+.opt.lv-中{border-left:2px solid var(--blu)}
+.opt.lv-强{border-left:2px solid var(--gold)}
+.opt.lv-极{border-left:2px solid var(--rose)}
+.opt.lv-锁{border-left:2px solid var(--faint); opacity:.6}
+.fork{display:flex; gap:7px; margin-top:8px; flex-wrap:wrap}
+.fork-btn{
+  flex:1; min-width:88px; padding:6px 10px; border-radius:8px; cursor:pointer; font-size:12.5px;
+  border:1px solid var(--line); background:var(--bg2); color:var(--ink); font-family:inherit;
+}
+.fork-btn:hover:not(:disabled){border-color:var(--dim)}
+.fork-btn:disabled{opacity:.4; cursor:not-allowed}
+.fork-btn.deny{border-color:rgba(224,122,154,.5); color:var(--rose)}
+.fork-btn.custom{border-color:rgba(180,138,216,.5); color:var(--pur)}
+.cx{display:none; margin-top:8px; border:1px dashed var(--line); border-radius:8px; padding:8px 10px}
+.cx.on{display:block}
+.cx .hint{font-size:11.5px; color:var(--dim); margin-bottom:6px}
+.cx textarea{width:100%; min-height:52px; resize:vertical; border-radius:6px; padding:6px 8px;
+  border:1px solid var(--line); background:var(--bg0); color:var(--ink); font-family:inherit; font-size:12.5px}
+.cx .row2{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:6px}
+.cx .cost{font-size:11px; color:var(--faint)}
+.cx button{padding:4px 12px; border-radius:6px; cursor:pointer; font-size:12px;
+  border:1px solid var(--line); background:var(--bg2); color:var(--ink); font-family:inherit}
+.cx-ok{border-color:rgba(180,138,216,.5); color:var(--pur)}
+.res{margin-top:7px; font-size:12px}
+.tip{font-size:11px; color:var(--faint); margin-top:7px; line-height:1.6}
 .fight{font-size:12.5px}
-.tag{display:inline-block; padding:1px 7px; border-radius:5px; border:1px solid var(--line); color:var(--dim); font-size:11px; margin-left:6px}
 </style>
 </head>
 <body>
@@ -71,6 +106,10 @@ html,body{margin:0;padding:0;background:transparent}
       <span id="yx-mp-t">内力 0</span>
       <span id="yx-res-t">反抗 100</span>
     </div>
+  </div>
+
+  <div class="row grid" id="yx-play" style="display:none">
+    <div class="panel full"><div id="yx-opts-wrap"></div></div>
   </div>
 
   <div class="row grid">
@@ -113,23 +152,37 @@ html,body{margin:0;padding:0;background:transparent}
   if (!D || D.dataset.done) return;
   D.dataset.done = '1';
   var $ = function (id) { return document.getElementById(id); };
-  var clamp = function (v, a, b) { v = Number(v) || 0; return Math.max(a, Math.min(b, v)); };
-  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); };
+  var 数 = function (v, d) { var n = Number(v); return isNaN(n) ? (d || 0) : n; };
+  var 夹 = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
+  var E = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); };
 
-  // 反哺：技能每 10 级给对应天赋 +1（与 成长引擎 C2 同式）
+  // ★ 确定性伪随机：与 世界观/引擎/反抗与判定 一致，禁止 Math.random
+  //   （同一楼层重新渲染必须得到同一个结果）
+  var A = 1664525, C = 1013904223, M = 4294967296;
+  function 推(s) { return (A * s + C) % M; }
+
+  // 反抗等级表：与条目的「反抗等级」一节逐字对齐
+  var 等级 = {
+    微: { c: [3, 5], 基: 90 }, 中: { c: [10, 15], 基: 60 },
+    强: { c: [25, 35], 基: 30 }, 极: { c: [50, 70], 基: 10 }, 锁: { c: null, 基: 0 },
+  };
+  var 归 = function (s) { s = String(s || '').trim(); return 等级[s] ? s : '中'; };
+  var 惩罚 = { 新手: 0, 上手: .1, 沉浸: .2, 狂热: .3, 收官: .4 };
+
+  // ── 反哺：技能每 10 级给对应天赋 +1（与 成长引擎 C2 同式）──
   var 反哺 = { 基本拳脚: '膂力', 基本轻功: '敏捷', 基本内功: '根骨', 读书写字: '悟性' };
   function 算天赋(sd) {
     var 基 = (sd.天赋 && sd.天赋.先天) || {};
     var out = { 膂力: 0, 敏捷: 0, 根骨: 0, 悟性: 0 };
-    ['膂力', '敏捷', '根骨', '悟性'].forEach(function (k) { out[k] = Number(基[k]) || 20; });
+    ['膂力', '敏捷', '根骨', '悟性'].forEach(function (k) { out[k] = 数(基[k], 20); });
     var 技 = (sd.技能 && sd.技能.基本) || {};
-    Object.keys(反哺).forEach(function (s) { out[反哺[s]] += Math.floor((Number(技[s]) || 0) / 10); });
+    Object.keys(反哺).forEach(function (s) { out[反哺[s]] += Math.floor(数(技[s]) / 10); });
     return out;
   }
   function 距反哺(sd) {
     var 技 = (sd.技能 && sd.技能.基本) || {}, best = null;
     Object.keys(反哺).forEach(function (s) {
-      var lv = Number(技[s]) || 0, 余 = lv % 10, d = 余 === 0 ? 10 : 10 - 余;
+      var lv = 数(技[s]), 余 = lv % 10, d = 余 === 0 ? 10 : 10 - 余;
       if (!best || d < best.d) best = { d: d, s: s, t: 反哺[s] };
     });
     return best;
@@ -137,22 +190,148 @@ html,body{margin:0;padding:0;background:transparent}
   // 派生值：只在面板算（C4），不写回变量、不进世界书
   function 派生(t, sd) {
     var 技 = (sd.技能 && sd.技能.基本) || {};
-    var 内功 = Number(技.基本内功) || 0, 招架 = Number(技.基本招架) || 0;
     return {
-      攻击: Math.round(t.膂力 * 2 + (Number(技.基本拳脚) || 0) * 0.8),
-      命中: Math.round(t.敏捷 * 2 + (Number(技.基本轻功) || 0) * 0.5),
-      闪避: Math.round(t.敏捷 * 1.5 + (Number(技.基本轻功) || 0) * 0.4),
-      防御: Math.round(t.根骨 * 1.5 + 招架 * 0.6),
-      气血上限: Math.round(t.根骨 * 12 + 内功 * 1.2 + 100)
+      攻击: Math.round(t.膂力 * 2 + 数(技.基本拳脚) * 0.8),
+      命中: Math.round(t.敏捷 * 2 + 数(技.基本轻功) * 0.5),
+      闪避: Math.round(t.敏捷 * 1.5 + 数(技.基本轻功) * 0.4),
+      防御: Math.round(t.根骨 * 1.5 + 数(技.基本招架) * 0.6),
+      气血上限: Math.round(t.根骨 * 12 + 数(技.基本内功) * 1.2 + 100),
     };
   }
   function 行(a, b, cls) {
-    return '<div class="line' + (cls ? ' ' + cls : '') + '"><span>' + esc(a) + '</span><b>' + esc(b) + '</b></div>';
+    return '<div class="line' + (cls ? ' ' + cls : '') + '"><span>' + E(a) + '</span><b>' + E(b) + '</b></div>';
   }
 
+  var 选中条 = '', 楼 = -1, 数据 = null;
+
+  // ════════ 出招层 ════════
+  function 画出招(局, 反抗值) {
+    var 选 = 局.当前选项 || {};
+    var 选键 = Object.keys(选).sort(function (a, b) { return Number(a) - Number(b); });
+    var 倾向 = String(局.她的倾向 || '');
+    var H = '<h5>她摆出来的 <span class="r">' + (倾向 ? ('她要点第 ' + E(倾向) + ' 条') : '还没点') + '</span></h5>';
+    if (!选键.length) {
+      H += '<div class="tip">这一层她还没摆出选项。等她动手。</div>';
+      $('yx-opts-wrap').innerHTML = H;
+      return;
+    }
+    H += '<div class="opts">';
+    选键.forEach(function (k) {
+      var o = 选[k] || {}, lv = 归(o.等级), c = 等级[lv].c;
+      H += '<div class="opt lv-' + lv + (选中条 === k ? ' sel' : '') + '" data-k="' + E(k) + '">'
+        + '<span class="row1"><span class="no">' + E(k) + '</span>'
+        + '<span class="tx">' + E(o.文本 || '') + '</span>'
+        + '<span class="lv">' + lv + (c ? ' ' + c[0] + '~' + c[1] : '') + '</span></span>'
+        + (o.感觉 ? '<div class="feel">' + E(o.感觉) + '</div>' : '')
+        + '</div>';
+    });
+    H += '</div>';
+    H += '<div class="fork">'
+      + '<button class="fork-btn" type="button" data-fork="watch">眼睁睁看着</button>'
+      + '<button class="fork-btn deny" type="button" data-fork="reject">拒绝</button>'
+      + '<button class="fork-btn custom" type="button" data-fork="custom">自定义</button>'
+      + '</div>';
+    H += '<div class="cx" data-cx>'
+      + '<div class="hint">不按她摆的来，写一件你想做的事。<b>掏空反抗值，一局顶多一两次。</b></div>'
+      + '<textarea data-cx-text placeholder="例：把她按在墙上，等她先开口"></textarea>'
+      + '<div class="row2"><span class="cost">消耗 50~70（手上 ' + Math.round(反抗值) + '）</span>'
+      + '<span><button class="cx-cancel" type="button" data-cx-cancel>算了</button> '
+      + '<button class="cx-ok" type="button" data-cx-ok>就这么做</button></span></div>'
+      + '</div>';
+    H += '<div class="res" data-res></div>';
+    H += '<div class="tip">看着＝不干预，反抗值照涨；拒绝＝花反抗值拦住她正要点的那个，花掉了就照扣；自定义＝照自己的想法做一次。</div>';
+    $('yx-opts-wrap').innerHTML = H;
+
+    [].forEach.call($('yx-opts-wrap').querySelectorAll('.opt'), function (el) {
+      el.addEventListener('click', function () {
+        选中条 = el.getAttribute('data-k');
+        [].forEach.call($('yx-opts-wrap').querySelectorAll('.opt'), function (x) { x.classList.remove('sel'); });
+        el.classList.add('sel');
+      });
+    });
+    var cx = $('yx-opts-wrap').querySelector('[data-cx]');
+    $('yx-opts-wrap').querySelector('[data-fork="custom"]').addEventListener('click', function () { cx.classList.toggle('on'); });
+    $('yx-opts-wrap').querySelector('[data-cx-cancel]').addEventListener('click', function () { cx.classList.remove('on'); });
+    $('yx-opts-wrap').querySelector('[data-cx-ok]').addEventListener('click', function () {
+      var v = ($('yx-opts-wrap').querySelector('[data-cx-text]').value || '').trim();
+      if (v) 发指令('custom', v);
+    });
+    [].forEach.call($('yx-opts-wrap').querySelectorAll('[data-fork]'), function (b) {
+      b.addEventListener('click', function () {
+        var f = b.getAttribute('data-fork');
+        if (f === 'reject') 发指令('reject', '');
+        else if (f === 'watch') 发指令('watch', '');
+      });
+    });
+  }
+
+  function 提示色(色, 文) {
+    var r = $('yx-opts-wrap').querySelector('[data-res]');
+    if (r) r.innerHTML = '<span style="color:var(--' + 色 + ')">' + 文 + '</span>';
+  }
+
+  // ════════ 写回变量 ════════
+  async function 发指令(动作, 文本) {
+    try {
+      var v = await TavernHelper.getVariables({ type: 'message', message_id: 楼 < 0 ? 'latest' : 楼 });
+      var sd = (v && v.stat_data) || {};
+      var 局 = sd.局面 || (sd.局面 = {});
+      var 她 = sd.她 || (sd.她 = {});
+      var 现有 = 夹(数(她.反抗值, 100), 0, 100);
+      var 种子 = 数(局.骰子种子, 20260916);
+      var s1 = 推(种子), s2 = 推(s1);
+
+      if (动作 === 'watch') {
+        局.玩家拒绝 = '';
+        局.判定结果 = { 选项: '', 等级: '看着', 消耗: 0, 结果: '看着', 效果倍数: 1, 档位: '看着' };
+        局.骰子种子 = s1;
+        局.当前选项 = {}; 局.她的倾向 = '';
+        提示色('faint', '眼睁睁看着。反抗值照涨，什么都没拦。');
+      } else if (动作 === 'custom') {
+        var 耗2 = 50 + Math.floor(s1 / M * 21);
+        if (现有 < 50) { 提示色('rose', '反抗值不够（要 50 以上，现有 ' + Math.round(现有) + '）。当不了。'); return; }
+        她.反抗值 = Math.max(0, 现有 - 耗2);
+        局.玩家拒绝 = '自定义';
+        局.判定结果 = { 选项: 文本, 等级: '自定义', 消耗: 耗2, 结果: '自定义', 效果倍数: 1, 档位: '自定义' };
+        局.骰子种子 = s2;
+        局.当前选项 = {}; 局.她的倾向 = '';
+        提示色('pur', '自定义：「' + E(文本) + '」，扣 ' + 耗2 + ' 反抗值。');
+      } else {
+        if (!选中条) { 提示色('rose', '先点一条你要拒的。'); return; }
+        var o = (局.当前选项 || {})[选中条] || {};
+        var lv = 归(o.等级), c = 等级[lv].c;
+        if (!c) { 提示色('rose', '这一条是锁，拒不了。'); return; }
+        var 耗 = c[0] + Math.floor(s1 / M * (c[1] - c[0] + 1));
+        if (现有 < 耗) { 提示色('rose', '反抗值不够（这条要 ' + 耗 + '，手上 ' + Math.round(现有) + '）。'); return; }
+        // 成功率 = 基础 × 兴奋度修正 × 熟练度惩罚；再掷一次
+        var S = 夹(等级[lv].基 * (1 + 数(她.兴奋度) / 100 * .5) * (1 - (惩罚[她.熟练度] || 0)), 1, 95);
+        var 掷 = s2 / M * 100, 成 = 掷 < S;
+        她.反抗值 = Math.max(0, 现有 - 耗);
+        局.骰子种子 = 推(s2);
+        局.玩家拒绝 = String(选中条);
+        局.判定结果 = {
+          选项: o.文本 || '', 等级: lv, 消耗: 耗,
+          成功率: Math.round(S), 掷值: Math.round(掷 * 100) / 100,
+          结果: 成 ? '顶住了' : '没顶住', 档位: 成 ? '成功' : '失败', 效果倍数: 成 ? 1 : 1,
+        };
+        局.当前选项 = {}; 局.她的倾向 = '';
+        提示色(成 ? 'grn' : 'rose',
+          '拒绝第 ' + E(选中条) + ' 条「' + E(o.文本 || '') + '」｜扣 ' + 耗 + '｜需 ' + Math.round(S) + '% 掷 ' +
+          (Math.round(掷 * 100) / 100) + ' → ' + (成 ? '顶住了' : '没顶住'));
+      }
+      await TavernHelper.replaceVariables({ type: 'message', message_id: 楼 < 0 ? 'latest' : 楼 }, v);
+      选中条 = '';
+      数据 = sd;
+    } catch (e) {
+      提示色('rose', '写不进去：' + E(e && e.message ? e.message : e));
+    }
+  }
+
+  // ════════ 主渲染 ════════
   function 画(sd) {
     if (!sd) return;
-    var T = sd.时间 || {}, C = sd.场景 || {}, B = sd.身体 || {}, R = sd.资源 || {}, H = sd.她 || {};
+    数据 = sd;
+    var T = sd.时间 || {}, C = sd.场景 || {}, B = sd.身体 || {}, R = sd.资源 || {}, H = sd.她 || {}, 局 = sd.局面 || {};
 
     $('yx-age').textContent = T.岁数 || 14;
     $('yx-mon').textContent = T.月 || 1;
@@ -163,27 +342,25 @@ html,body{margin:0;padding:0;background:transparent}
     $('yx-place').textContent = C.当前地点 || '平安镇';
 
     var t = 算天赋(sd), d = 派生(t, sd);
-    var hpMax = d.气血上限, hp = clamp(B.生命当前, 0, hpMax);
-    var mpMax = Math.max(1, Number(B.内力强度) || 0), mp = clamp(B.内力蓄存, 0, mpMax);
-    var res = clamp(H.反抗值, 0, 100);
+    var hpMax = d.气血上限, hp = 夹(数(B.生命当前), 0, hpMax);
+    var mpMax = Math.max(1, 数(B.内力强度)), mp = 夹(数(B.内力蓄存), 0, mpMax);
+    var 反抗 = 夹(数(H.反抗值, 100), 0, 100);
 
     $('yx-hp').style.width = (hp / hpMax * 100) + '%';
     $('yx-mp').style.width = (mp / mpMax * 100) + '%';
-    $('yx-res').style.width = res + '%';
+    $('yx-res').style.width = 反抗 + '%';
     $('yx-hp-t').textContent = '生命 ' + Math.round(hp) + '/' + hpMax + '　有效 ' + (B.生命有效 == null ? 100 : B.生命有效) + '%';
     $('yx-mp-t').textContent = '内力 ' + Math.round(mp) + '/' + mpMax;
-    $('yx-res-t').textContent = '反抗 ' + res;
+    $('yx-res-t').textContent = '反抗 ' + Math.round(反抗);
 
     $('yx-talents').innerHTML = ['膂力', '敏捷', '根骨', '悟性'].map(function (k) { return 行(k, t[k]); }).join('');
     $('yx-deriv').innerHTML = Object.keys(d).map(function (k) { return 行(k, d[k], 'dimline'); }).join('');
 
-    var 技 = (sd.技能 || {}).基本 || {};
-    var 已学 = Object.keys(技).filter(function (k) { return (Number(技[k]) || 0) > 0; });
-    var 门派 = (sd.技能 || {}).门派 || {};
-    var 门派已学 = Object.keys(门派).filter(function (k) { return (Number(门派[k]) || 0) > 0; });
-    var 全部 = 已学.concat(门派已学);
-    $('yx-skills').innerHTML = 全部.length
-      ? 全部.map(function (k) { return 行(k, 技[k] != null ? 技[k] : 门派[k]); }).join('')
+    var 技 = (sd.技能 || {}).基本 || {}, 门派 = (sd.技能 || {}).门派 || {};
+    var 已学 = Object.keys(技).filter(function (k) { return 数(技[k]) > 0; }).map(function (k) { return [k, 技[k]]; })
+      .concat(Object.keys(门派).filter(function (k) { return 数(门派[k]) > 0; }).map(function (k) { return [k, 门派[k]]; }));
+    $('yx-skills').innerHTML = 已学.length
+      ? 已学.map(function (x) { return 行(x[0], x[1]); }).join('')
       : '<div class="empty">还没学任何功夫。去找个师傅，或者去翻秘籍。</div>';
     var nf = 距反哺(sd);
     $('yx-nextfeed').textContent = nf ? '再练 ' + nf.d + ' 级 ' + nf.s + '，' + nf.t + ' +1' : '';
@@ -192,34 +369,33 @@ html,body{margin:0;padding:0;background:transparent}
       .map(function (x) { return 行(x[0], x[1] == null ? 0 : x[1]); }).join('');
 
     $('yx-her').innerHTML = [
-      ['熟练度', H.熟练度 || '新手'],
-      ['兴奋度', H.兴奋度 == null ? 0 : H.兴奋度],
-      ['世界的裂缝', H.世界的裂缝 == null ? 0 : H.世界的裂缝],
-      ['目的进度', (H.目的进度 == null ? 0 : H.目的进度) + '%']
+      ['熟练度', H.熟练度 || '新手'], ['兴奋度', 数(H.兴奋度)],
+      ['世界的裂缝', 数(H.世界的裂缝)], ['目的进度', 数(H.目的进度) + '%'],
     ].map(function (x) { return 行(x[0], x[1]); }).join('');
-
     var 关系 = (sd.关系 || {})[C.当前女角];
     $('yx-target').textContent = C.当前女角
       ? ('正在她这条线上：' + C.当前女角 + (关系 ? '（' + (关系.关系阶段 || '陌生') + ' · 好感 ' + (关系.好感度 || 0) + '）' : ''))
       : '';
 
-    var F = (sd.局面 || {}).战斗结果;
+    if (Object.keys(局.当前选项 || {}).length) {
+      $('yx-play').style.display = '';
+      画出招(局, 反抗);
+    } else { $('yx-play').style.display = 'none'; }
+
+    var F = 局.战斗结果;
     if (F && F.结果) {
       $('yx-fight').style.display = '';
-      $('yx-fightbody').innerHTML =
-        行(F.结果, F.回合数 + ' 回合') +
-        行('我方', F.我方状态 || '') +
-        行('对方', F.对方状态 || '') +
-        ((F.不可逆 || []).length ? 行('不可逆', F.不可逆.join('、'), 'warn') : '');
+      $('yx-fightbody').innerHTML = 行(F.结果, F.回合数 + ' 回合') + 行('我方', F.我方状态 || '') + 行('对方', F.对方状态 || '')
+        + ((F.不可逆 || []).length ? 行('不可逆', F.不可逆.join('、'), 'warn') : '');
     } else { $('yx-fight').style.display = 'none'; }
   }
 
-  function 拉取() {
+  async function 拉取() {
     try {
       if (typeof TavernHelper === 'undefined' || !TavernHelper.getVariables) return;
-      Promise.resolve(TavernHelper.getVariables({ type: 'message', message_id: 'latest' }))
-        .then(function (v) { 画(v && v.stat_data); })
-        .catch(function () {});
+      var v = await TavernHelper.getVariables({ type: 'message', message_id: 'latest' });
+      楼 = (v && v.message_id != null) ? v.message_id : -1;
+      画(v && v.stat_data);
     } catch (e) { /* 变量还没生成，等下一轮 */ }
   }
   拉取();
