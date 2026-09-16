@@ -188,6 +188,128 @@ export function fight(cfg = {}, rng, rate) {
   };
 }
 
+/* ════════ C5 · 解锁条件（多条件联合）════════
+   「两样东西同时到某个级数，第三样才出现」——
+   它不是状态，是一个判定；结果不是数值，是「能不能用」。
+*/
+export function entrance(条件表 = [], 值表 = {}) {
+  const 已解锁 = [], 未解锁 = [];
+  for (const r of 条件表) {
+    if (!r || !r.名) continue;
+    const 缺 = [];
+    for (const 项 of r.需要 || []) {
+      const 现 = Number(值表[项.字段]) || 0, 要 = Number(项.至少) || 0;
+      if (现 < 要) 缺.push({ 字段: 项.字段, 现, 需: 要 });
+    }
+    if (缺.length) 未解锁.push({ 名: r.名, 缺 }); else 已解锁.push(r.名);
+  }
+  return { 已解锁, 未解锁 };
+}
+export function unlocked(条件表, 名, 值表) { return entrance(条件表, 值表).已解锁.includes(名); }
+export function 距解锁(条件表 = [], 名, 值表 = {}) {
+  for (const r of 条件表) {
+    if (r.名 !== 名) continue;
+    return (r.需要 || []).filter((x) => (Number(值表[x.字段]) || 0) < Number(x.至少))
+      .map((x) => x.字段 + ' 还差 ' + (Number(x.至少) - (Number(值表[x.字段]) || 0)) + ' 级');
+  }
+  return [];
+}
+
+/* ════════ E7 装备与背包 ════════ */
+export function equip(穿着表 = {}, 槽, 物) {
+  if (!(槽 in 穿着表)) return { 可以: false, 原因: '没有这个槽位' };
+  const 旧 = 穿着表[槽];
+  穿着表[槽] = 物;
+  return { 可以: true, 换下: 旧, 现在: 物 };
+}
+export function equipBonus(穿着表 = {}, 物表 = {}, 品质倍率 = {}) {
+  const out = {};
+  for (const 槽 in 穿着表) {
+    const o = 物表[穿着表[槽]];
+    if (!o) continue;
+    const m = Number(品质倍率[o.品质]) || 1;
+    for (const k in (o.加成 || {})) out[k] = (Number(out[k]) || 0) + (Number(o.加成[k]) || 0) * m;
+  }
+  return out;
+}
+export function 装备后输入(基础值表 = {}, 穿着表, 物表, 档位表 = []) {
+  const out = { ...基础值表 };
+  const 倍 = {};
+  for (const x of 档位表) 倍[x.名] = Number(x.倍率) || 1;
+  const 加 = equipBonus(穿着表, 物表, 倍);
+  for (const k in 加) out[k] = (Number(out[k]) || 0) + 加[k];
+  return out;
+}
+export function consume(资源表 = {}, 物 = {}, 次数 = 1) {
+  const n = Math.max(1, Number(次数) || 1);
+  for (const k in (物.效果 || {})) {
+    资源表[k] = (Number(资源表[k]) || 0) + (Number(物.效果[k]) || 0) * n;
+    const 上 = (物.上限 || {})[k];
+    if (上 !== undefined) 资源表[k] = Math.min(Number(上), 资源表[k]);
+  }
+  return { 用掉: n, 现在: 资源表 };
+}
+export function 低于门槛(资源表 = {}, 门槛表 = {}) {
+  const 触发 = Object.keys(门槛表).filter((k) => (Number(资源表[k]) || 0) < (Number(门槛表[k]) || 0));
+  return { 触发, 有没有: 触发.length > 0 };
+}
+export function canHold(背包 = [], 容量 = 0) {
+  const 容 = Number(容量) || 0;
+  if (容 <= 0) return { 可以: true, 剩余: 9999 };
+  return { 可以: 背包.length < 容, 剩余: Math.max(0, 容 - 背包.length) };
+}
+export function putIn(背包 = [], 物, 容量) {
+  const r = canHold(背包, 容量);
+  if (!r.可以) return { 可以: false, 原因: '装不下了', 剩余: 0 };
+  背包.push(物);
+  return { 可以: true, 剩余: r.剩余 - 1 };
+}
+export function takeOut(背包 = [], 物) {
+  const i = 背包.indexOf(物);
+  if (i < 0) return { 可以: false, 原因: '身上没有' };
+  背包.splice(i, 1);
+  return { 可以: true };
+}
+export function hasItem(背包 = [], 物) { return 背包.indexOf(物) >= 0; }
+
+/* ════════ E8 品质与掉落 ════════ */
+export function 品质倍率(档位表 = [], 名) {
+  for (const x of 档位表) if (x.名 === 名) return Number(x.倍率) || 1;
+  return 1;
+}
+export function dropTable(档位表 = [], 修正, 值表 = {}, rng) {
+  let 加 = 0;
+  if (修正) {
+    加 = (Number(值表[修正.影响字段]) || 0) * (Number(修正.每点权重) || 0);
+    if (修正.上限 !== undefined) 加 = Math.min(Number(修正.上限), 加);
+  }
+  const 权 = [];
+  let 总 = 0;
+  档位表.forEach((x, i) => {
+    let w = Number(x.权重) || 0;
+    if (i > 0) w = w * (1 + 加);          // 修正只抬高高档
+    权.push(w); 总 += w;
+  });
+  if (总 <= 0) return null;
+  const 掷 = rng() * 总;
+  let 累 = 0;
+  for (let i = 0; i < 权.length; i++) { 累 += 权[i]; if (掷 < 累) return 档位表[i].名; }
+  return 档位表[档位表.length - 1].名;
+}
+export function 强化(物 = {}, 层数 = 0, cfg = {}) {
+  const 上限 = Number(cfg.上限) || 10, 每层 = Number(cfg.每层倍率) || 0.1;
+  const n = Math.min(上限, Math.max(0, Number(层数) || 0));
+  const out = {};
+  for (const k in (物.加成 || {})) out[k] = (Number(物.加成[k]) || 0) * (1 + 每层 * n);
+  return { 层数: n, 加成: out, 满没满: n >= 上限 };
+}
+export function 合成(材料表 = {}, 配方 = {}) {
+  const 缺 = Object.keys(配方.需要 || {}).filter((k) => (Number(材料表[k]) || 0) < Number(配方.需要[k]));
+  if (缺.length) return { 可以: false, 缺 };
+  for (const k in 配方.需要) 材料表[k] = (Number(材料表[k]) || 0) - Number(配方.需要[k]);
+  return { 可以: true, 得到: 配方.产出, 剩余: 材料表 };
+}
+
 /* ════════ NPC 参战派生（从战力档位推）════════
    ★ 这是**标定**，不是原作数据 —— 原作只给了「战力」一个数。
    映射的依据是让档位与武功等级大致对齐（100 档 ≈ 三十级，1000 档 ≈ 一百一十级）。
