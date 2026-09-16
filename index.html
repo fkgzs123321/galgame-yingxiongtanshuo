@@ -312,7 +312,9 @@ import { levelCost, canLevelUp, nextFeed, canAfford, applyFeed, fight, 参战, r
         var 耗 = c[0] + Math.floor(s1 / M * (c[1] - c[0] + 1));
         if (现有 < 耗) { 提示色('rose', '反抗值不够（这条要 ' + 耗 + '，手上 ' + Math.round(现有) + '）。'); return; }
         // 成功率 = 基础 × 兴奋度修正 × 熟练度惩罚；再掷一次
-        var S = 夹(等级[lv].基 * (1 + 数(她.兴奋度) / 100 * .5) * (1 - (惩罚[她.熟练度] || 0)), 1, 95);
+        // ★ 兴奋度从 NSFW 块读；熟练度从 她 块读。原来这里写的是「她.兴奋度」
+      //   —— 而 JS 里根本没有那个变量，一点拒绝就 ReferenceError。测试没发现，因为面板没进过酒馆
+      var S = 夹(等级[lv].基 * (1 + 数(NS.兴奋度) / 100 * .5) * (1 - (惩罚[H.熟练度] || 0)), 1, 95);
         var 掷 = s2 / M * 100, 成 = 掷 < S;
         她.反抗值 = Math.max(0, 现有 - 耗);
         局.骰子种子 = 推(s2);
@@ -409,6 +411,7 @@ import { levelCost, canLevelUp, nextFeed, canAfford, applyFeed, fight, 参战, r
     if (!sd) return;
     数据 = sd;
     var T = sd.时间 || {}, C = sd.场景 || {}, B = sd.身体 || {}, R = sd.资源 || {}, H = sd.她 || {}, 局 = sd.局面 || {};
+    var NS = sd.NSFW || {};   // ★ NSFW 的字段单放一块（引擎隔离）
 
     $('yx-age').textContent = T.岁数 || 14;
     $('yx-mon').textContent = T.月 || 1;
@@ -452,7 +455,7 @@ import { levelCost, canLevelUp, nextFeed, canAfford, applyFeed, fight, 参战, r
       .map(function (x) { return 行(x[0], x[1] == null ? 0 : x[1]); }).join('');
 
     $('yx-her').innerHTML = [
-      ['熟练度', H.熟练度 || '新手'], ['兴奋度', 数(H.兴奋度)],
+      ['熟练度', H.熟练度 || '新手'], ['兴奋度', 数(NS.兴奋度)],
       ['世界的裂缝', 数(H.世界的裂缝)], ['目的进度', 数(H.目的进度) + '%'],
     ].map(function (x) { return 行(x[0], x[1]); }).join('');
     var 关系 = (sd.关系 || {})[C.当前女角];
