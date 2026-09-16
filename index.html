@@ -82,6 +82,10 @@ h5 .r{color:var(--gold); font-size:11.5px; letter-spacing:0}
 .res{margin-top:7px; font-size:12px}
 .tip{font-size:11px; color:var(--faint); margin-top:7px; line-height:1.6}
 .fight{font-size:12.5px}
+.sk-plus,.foe{background:var(--bg2);border:1px solid var(--line);color:var(--gold);border-radius:6px;
+  cursor:pointer;font-family:inherit;font-size:12px;padding:1px 8px;margin-left:6px}
+.sk-plus:hover,.foe:hover{border-color:var(--gold)}
+.foes{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -146,7 +150,11 @@ h5 .r{color:var(--gold); font-size:11.5px; letter-spacing:0}
   </div>
 </div>
 
-<script>
+<script type="module">
+// ★ 三个引擎的共享实现从 CDN 取 —— 与机制层的 .txt 是同一套算法，不抄第二份
+import { levelCost, canLevelUp, nextFeed, canAfford, applyFeed, fight, 参战, rateFromDiff, lcgNext } from
+  'https://testingcf.jsdelivr.net/gh/fkgzs123321/galgame-yingxiongtanshuo@5ee2693/引擎.js';
+
 (function () {
   var D = document.getElementById('yxts-hud');
   if (!D || D.dataset.done) return;
@@ -327,6 +335,75 @@ h5 .r{color:var(--gold); font-size:11.5px; letter-spacing:0}
     }
   }
 
+  // ════════ 成长引擎：请教（C1 成本 + C2 反哺 + C3 资源门）════════
+  // 契约参数来自 底座_yingxiong/成长公式表.yaml：k=355.06，linear，效率=悟性
+  async function 请教(技能名) {
+    try {
+      var v = await TavernHelper.getVariables({ type: 'message', message_id: 楼 < 0 ? 'latest' : 楼 });
+      var sd = (v && v.stat_data) || {};
+      var 技 = ((sd.技能 || {}).基本) || ((sd.技能 = sd.技能 || {}).基本 = {});
+      var 门派 = (sd.技能 || {}).门派 || {};
+      var 悟性 = 数((sd.天赋 && sd.天赋.膂力 !== undefined ? 天赋现值(sd).悟性 : 20), 20);
+      var 现级 = 数(技[技能名] !== undefined ? 技[技能名] : 门派[技能名], 0);
+      var 资源 = sd.资源 || (sd.资源 = {});
+      var cfg = { k: 355.06, 效率: Math.max(1, 悟性), 类型: 'linear', 常规上限: 250, 极限: 255 };
+      var up = canLevelUp(cfg, 现级);
+      var r = 提示色;
+      if (!up.可) { r('rose', '「' + E(技能名) + '」' + up.原因 + '（' + 现级 + ' 级）'); return; }
+      var 要 = levelCost(cfg, 现级);
+      var 门 = canAfford({ 潜能: 要 }, 资源);
+      if (!门.可以) { r('rose', '潜能不够：升到 ' + (现级 + 1) + ' 级要 ' + 要 + '，手上 ' + 数(资源.潜能) + '（悟性 ' + 悟性 + '）'); return; }
+      资源.潜能 = 数(资源.潜能) - 要;
+      if (技[技能名] !== undefined) 技[技能名] = 现级 + 1; else 门派[技能名] = 现级 + 1;
+      // 重算反哺（技能每 10 级给对应天赋 +1）
+      var 反哺表 = [{ 源: '基本拳脚', 目标: '膂力', 每N档: 10 }, { 源: '基本轻功', 目标: '敏捷', 每N档: 10 },
+                   { 源: '基本内功', 目标: '根骨', 每N档: 10 }, { 源: '读书写字', 目标: '悟性', 每N档: 10 }];
+      var 先天 = ((sd.天赋 || {}).先天) || {};
+      var 新天赋 = applyFeed(反哺表, 技, { 膂力: 数(先天.膂力, 20), 敏捷: 数(先天.敏捷, 20), 根骨: 数(先天.根骨, 20), 悟性: 数(先天.悟性, 20) });
+      sd.天赋 = Object.assign({}, sd.天赋, 新天赋, { 先天: 先天 });
+      var nf = nextFeed(技[技能名], 10);
+      r('grn', '「' + E(技能名) + '」→ ' + (现级 + 1) + ' 级，花 ' + 要 + ' 潜能（悟性 ' + 悟性 + '）'
+        + (技[技能名] % 10 === 0 ? '　★ 触发反哺' : '　再练 ' + nf + ' 级反哺 +1'));
+      await TavernHelper.replaceVariables({ type: 'message', message_id: 楼 < 0 ? 'latest' : 楼 }, v);
+    } catch (e) { 提示色('rose', '写不进去：' + E(e && e.message ? e.message : e)); }
+  }
+  function 天赋现值(sd) { return 算天赋(sd); }
+
+  // ════════ 战斗引擎：动手（真跑回合循环）════════
+  var 对手表 = null;
+  async function 加载对手() {
+    if (对手表) return 对手表;
+    try {
+      var r = await fetch('https://testingcf.jsdelivr.net/gh/fkgzs123321/galgame-yingxiongtanshuo@5ee2693/NPC战力表.json');
+      对手表 = await r.json();
+    } catch (e) { 对手表 = {}; }
+    return 对手表;
+  }
+  async function 动手(对手名) {
+    try {
+      var v = await TavernHelper.getVariables({ type: 'message', message_id: 楼 < 0 ? 'latest' : 楼 });
+      var sd = (v && v.stat_data) || {};
+      var 局 = sd.局面 || (sd.局面 = {});
+      var t = 算天赋(sd), d = 派生(t, sd);
+      var 表 = await 加载对手();
+      var 敌cfg = 表[对手名] || { 战力: 100 };
+      var 我 = { 生命: 数((sd.身体 || {}).生命当前, 100), 上限: d.气血上限, 攻击: d.攻击, 防御: d.防御,
+        总评: Math.round((t.膂力 + t.敏捷 + t.根骨 + t.悟性) / 4), 出手值: t.敏捷, 有效值: 数((sd.身体 || {}).生命有效, 100) };
+      var 敌 = 参战({ 战力: 敌cfg.战力 });
+      var 种子 = 数(局.骰子种子, 20260916);
+      var st = 种子;
+      var rng = function () { st = lcgNext(st); return st / 4294967296; };
+      var 命中 = { 基准: 45, 斜率: 2.2, 下限: 1, 上限: 95 };
+      我.命中 = 命中; 敌.命中 = 命中; 敌.闪避加成 = 0; 我.闪避加成 = 0;
+      var 战 = fight({ 我方: 我, 对方: 敌, 上限回合: 50, 计有效值: true }, rng, rateFromDiff);
+      局.骰子种子 = st;
+      局.战斗结果 = 战.摘要;
+      (sd.身体 = sd.身体 || {}).生命当前 = Math.max(0, 战.我方剩余);
+      sd.身体.生命有效 = Math.max(0, 数(战.我方有效值, 数(sd.身体.生命有效, 100)));
+      await TavernHelper.replaceVariables({ type: 'message', message_id: 楼 < 0 ? 'latest' : 楼 }, v);
+    } catch (e) { 提示色('rose', '战斗没跑起来：' + E(e && e.message ? e.message : e)); }
+  }
+
   // ════════ 主渲染 ════════
   function 画(sd) {
     if (!sd) return;
@@ -360,8 +437,14 @@ h5 .r{color:var(--gold); font-size:11.5px; letter-spacing:0}
     var 已学 = Object.keys(技).filter(function (k) { return 数(技[k]) > 0; }).map(function (k) { return [k, 技[k]]; })
       .concat(Object.keys(门派).filter(function (k) { return 数(门派[k]) > 0; }).map(function (k) { return [k, 门派[k]]; }));
     $('yx-skills').innerHTML = 已学.length
-      ? 已学.map(function (x) { return 行(x[0], x[1]); }).join('')
+      ? 已学.map(function (x) {
+          return '<div class="line"><span>' + E(x[0]) + '</span><b>' + E(x[1]) + '</b>'
+            + '<button class="sk-plus" data-skill="' + E(x[0]) + '" title="请教一级">+</button></div>';
+        }).join('')
       : '<div class="empty">还没学任何功夫。去找个师傅，或者去翻秘籍。</div>';
+    [].forEach.call($('yx-skills').querySelectorAll('.sk-plus'), function (b) {
+      b.addEventListener('click', function () { 请教(b.getAttribute('data-skill')); });
+    });
     var nf = 距反哺(sd);
     $('yx-nextfeed').textContent = nf ? '再练 ' + nf.d + ' 级 ' + nf.s + '，' + nf.t + ' +1' : '';
 
@@ -383,11 +466,25 @@ h5 .r{color:var(--gold); font-size:11.5px; letter-spacing:0}
     } else { $('yx-play').style.display = 'none'; }
 
     var F = 局.战斗结果;
-    if (F && F.结果) {
-      $('yx-fight').style.display = '';
-      $('yx-fightbody').innerHTML = 行(F.结果, F.回合数 + ' 回合') + 行('我方', F.我方状态 || '') + 行('对方', F.对方状态 || '')
-        + ((F.不可逆 || []).length ? 行('不可逆', F.不可逆.join('、'), 'warn') : '');
-    } else { $('yx-fight').style.display = 'none'; }
+    var 地点 = C.当前地点 || '';
+    $('yx-fight').style.display = '';
+    加载对手().then(function (表) {
+      var 在场 = Object.keys(表).filter(function (n) { return 地点 && String(表[n].所在).indexOf(地点.slice(0, 3)) >= 0; }).slice(0, 6);
+      var H = '';
+      if (F && F.结果) {
+        H += 行(F.结果, F.回合数 + ' 回合') + 行('我方', F.我方状态 || '') + 行('对方', F.对方状态 || '')
+          + ((F.不可逆 || []).length ? 行('不可逆', F.不可逆.join('、'), 'warn') : '') + '<div style="height:7px"></div>';
+      }
+      if (在场.length) {
+        H += '<div class="sub">这一带能动手的</div><div class="foes">';
+        在场.forEach(function (n) { H += '<button class="foe" data-foe="' + E(n) + '">' + E(n) + '</button>'; });
+        H += '</div>';
+      } else { H += '<div class="sub">这一带没有能动手的人。</div>'; }
+      $('yx-fightbody').innerHTML = H;
+      [].forEach.call($('yx-fightbody').querySelectorAll('.foe'), function (b) {
+        b.addEventListener('click', function () { 动手(b.getAttribute('data-foe')); });
+      });
+    });
   }
 
   async function 拉取() {
