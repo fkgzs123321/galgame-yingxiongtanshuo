@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>英雄坛说 · 状态栏</title>
+<style>
+:root{
+  --bg0:#0b0d12; --bg1:#12161f; --bg2:#1a1f2b; --line:#2b3344;
+  --ink:#d8dff0; --dim:#79839c; --faint:#4e5769;
+  --gold:#e8b84b; --grn:#6fcf97; --rose:#e07a9a; --blu:#5fa8d0; --pur:#b48ad8;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:transparent}
+.wrap{
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  color:var(--ink);
+  font-size:13px; line-height:1.65;
+  border:1px solid var(--line); border-radius:12px;
+  background:linear-gradient(180deg,var(--bg1),var(--bg0));
+  padding:13px 15px; margin:8px 0;
+}
+.row{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:9px}
+.row:last-child{margin-bottom:0}
+.top{gap:18px; border-bottom:1px solid var(--line); padding-bottom:9px}
+.cell{display:flex; align-items:baseline; gap:5px}
+.k{color:var(--faint); font-size:11.5px; letter-spacing:.03em}
+.v{font-weight:500; color:var(--ink)}
+.warn{color:var(--rose)}
+.gold{color:var(--gold)}
+.bars{flex:1; min-width:190px; display:flex; flex-direction:column; gap:5px; justify-content:center}
+.bar{height:7px; border-radius:4px; background:var(--bg2); overflow:hidden}
+.fill{display:block; height:100%; border-radius:4px; transition:width .3s}
+.hp{background:linear-gradient(90deg,#3f8f68,var(--grn))}
+.mp{background:linear-gradient(90deg,#2f6f95,var(--blu))}
+.res{background:linear-gradient(90deg,#8f3f5c,var(--rose))}
+.nums{display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--dim); justify-content:center}
+.grid{gap:12px}
+.panel{flex:1; min-width:196px; border:1px solid var(--line); border-radius:9px; padding:9px 11px; background:rgba(255,255,255,.014)}
+.full{flex:1 1 100%}
+.h{font-size:11.5px; letter-spacing:.09em; color:var(--faint); margin-bottom:6px; text-transform:uppercase}
+.sub{font-size:11px; color:var(--faint); margin-top:6px}
+.col{display:flex; flex-direction:column; gap:3px}
+.line{display:flex; justify-content:space-between; gap:10px}
+.line b{font-weight:500; color:var(--ink)}
+.dimline{color:var(--dim)}
+.empty{color:var(--faint); font-size:12px}
+.fight{font-size:12.5px}
+.tag{display:inline-block; padding:1px 7px; border-radius:5px; border:1px solid var(--line); color:var(--dim); font-size:11px; margin-left:6px}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="yxts-hud">
+  <div class="row top">
+    <div class="cell"><span class="k">岁数</span><span class="v gold" id="yx-age">14</span>
+      <span class="k" style="margin-left:8px">月</span><span class="v" id="yx-mon">1</span></div>
+    <div class="cell"><span class="k">她的期限</span><span class="v warn" id="yx-limit">24</span><span class="k">月</span></div>
+    <div class="cell"><span class="k">门派</span><span class="v" id="yx-sect">无</span></div>
+    <div class="cell"><span class="k">所在</span><span class="v" id="yx-place">平安镇</span></div>
+  </div>
+
+  <div class="row">
+    <div class="bars">
+      <div class="bar"><i id="yx-hp" class="fill hp" style="width:100%"></i></div>
+      <div class="bar"><i id="yx-mp" class="fill mp" style="width:0%"></i></div>
+      <div class="bar"><i id="yx-res" class="fill res" style="width:100%"></i></div>
+    </div>
+    <div class="nums">
+      <span id="yx-hp-t">生命 100</span>
+      <span id="yx-mp-t">内力 0</span>
+      <span id="yx-res-t">反抗 100</span>
+    </div>
+  </div>
+
+  <div class="row grid">
+    <div class="panel">
+      <div class="h">四天赋</div>
+      <div class="col" id="yx-talents"></div>
+      <div class="sub">派生值只在面板算，正文里不出现数</div>
+      <div class="col dimline" id="yx-deriv" style="font-size:12px"></div>
+    </div>
+    <div class="panel">
+      <div class="h">技能</div>
+      <div class="col" id="yx-skills"></div>
+      <div class="sub" id="yx-nextfeed"></div>
+    </div>
+  </div>
+
+  <div class="row grid">
+    <div class="panel">
+      <div class="h">资源</div>
+      <div class="col" id="yx-res2"></div>
+    </div>
+    <div class="panel">
+      <div class="h">她</div>
+      <div class="col" id="yx-her"></div>
+      <div class="sub" id="yx-target"></div>
+    </div>
+  </div>
+
+  <div class="row" id="yx-fight" style="display:none">
+    <div class="panel full">
+      <div class="h">这一场</div>
+      <div class="fight" id="yx-fightbody"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var D = document.getElementById('yxts-hud');
+  if (!D || D.dataset.done) return;
+  D.dataset.done = '1';
+  var $ = function (id) { return document.getElementById(id); };
+  var clamp = function (v, a, b) { v = Number(v) || 0; return Math.max(a, Math.min(b, v)); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); };
+
+  // 反哺：技能每 10 级给对应天赋 +1（与 成长引擎 C2 同式）
+  var 反哺 = { 基本拳脚: '膂力', 基本轻功: '敏捷', 基本内功: '根骨', 读书写字: '悟性' };
+  function 算天赋(sd) {
+    var 基 = (sd.天赋 && sd.天赋.先天) || {};
+    var out = { 膂力: 0, 敏捷: 0, 根骨: 0, 悟性: 0 };
+    ['膂力', '敏捷', '根骨', '悟性'].forEach(function (k) { out[k] = Number(基[k]) || 20; });
+    var 技 = (sd.技能 && sd.技能.基本) || {};
+    Object.keys(反哺).forEach(function (s) { out[反哺[s]] += Math.floor((Number(技[s]) || 0) / 10); });
+    return out;
+  }
+  function 距反哺(sd) {
+    var 技 = (sd.技能 && sd.技能.基本) || {}, best = null;
+    Object.keys(反哺).forEach(function (s) {
+      var lv = Number(技[s]) || 0, 余 = lv % 10, d = 余 === 0 ? 10 : 10 - 余;
+      if (!best || d < best.d) best = { d: d, s: s, t: 反哺[s] };
+    });
+    return best;
+  }
+  // 派生值：只在面板算（C4），不写回变量、不进世界书
+  function 派生(t, sd) {
+    var 技 = (sd.技能 && sd.技能.基本) || {};
+    var 内功 = Number(技.基本内功) || 0, 招架 = Number(技.基本招架) || 0;
+    return {
+      攻击: Math.round(t.膂力 * 2 + (Number(技.基本拳脚) || 0) * 0.8),
+      命中: Math.round(t.敏捷 * 2 + (Number(技.基本轻功) || 0) * 0.5),
+      闪避: Math.round(t.敏捷 * 1.5 + (Number(技.基本轻功) || 0) * 0.4),
+      防御: Math.round(t.根骨 * 1.5 + 招架 * 0.6),
+      气血上限: Math.round(t.根骨 * 12 + 内功 * 1.2 + 100)
+    };
+  }
+  function 行(a, b, cls) {
+    return '<div class="line' + (cls ? ' ' + cls : '') + '"><span>' + esc(a) + '</span><b>' + esc(b) + '</b></div>';
+  }
+
+  function 画(sd) {
+    if (!sd) return;
+    var T = sd.时间 || {}, C = sd.场景 || {}, B = sd.身体 || {}, R = sd.资源 || {}, H = sd.她 || {};
+
+    $('yx-age').textContent = T.岁数 || 14;
+    $('yx-mon').textContent = T.月 || 1;
+    var lim = T.她的期限 == null ? 24 : T.她的期限;
+    $('yx-limit').textContent = lim;
+    $('yx-limit').className = lim <= 6 ? 'v warn' : 'v';
+    $('yx-sect').textContent = C.当前门派 || '无';
+    $('yx-place').textContent = C.当前地点 || '平安镇';
+
+    var t = 算天赋(sd), d = 派生(t, sd);
+    var hpMax = d.气血上限, hp = clamp(B.生命当前, 0, hpMax);
+    var mpMax = Math.max(1, Number(B.内力强度) || 0), mp = clamp(B.内力蓄存, 0, mpMax);
+    var res = clamp(H.反抗值, 0, 100);
+
+    $('yx-hp').style.width = (hp / hpMax * 100) + '%';
+    $('yx-mp').style.width = (mp / mpMax * 100) + '%';
+    $('yx-res').style.width = res + '%';
+    $('yx-hp-t').textContent = '生命 ' + Math.round(hp) + '/' + hpMax + '　有效 ' + (B.生命有效 == null ? 100 : B.生命有效) + '%';
+    $('yx-mp-t').textContent = '内力 ' + Math.round(mp) + '/' + mpMax;
+    $('yx-res-t').textContent = '反抗 ' + res;
+
+    $('yx-talents').innerHTML = ['膂力', '敏捷', '根骨', '悟性'].map(function (k) { return 行(k, t[k]); }).join('');
+    $('yx-deriv').innerHTML = Object.keys(d).map(function (k) { return 行(k, d[k], 'dimline'); }).join('');
+
+    var 技 = (sd.技能 || {}).基本 || {};
+    var 已学 = Object.keys(技).filter(function (k) { return (Number(技[k]) || 0) > 0; });
+    var 门派 = (sd.技能 || {}).门派 || {};
+    var 门派已学 = Object.keys(门派).filter(function (k) { return (Number(门派[k]) || 0) > 0; });
+    var 全部 = 已学.concat(门派已学);
+    $('yx-skills').innerHTML = 全部.length
+      ? 全部.map(function (k) { return 行(k, 技[k] != null ? 技[k] : 门派[k]); }).join('')
+      : '<div class="empty">还没学任何功夫。去找个师傅，或者去翻秘籍。</div>';
+    var nf = 距反哺(sd);
+    $('yx-nextfeed').textContent = nf ? '再练 ' + nf.d + ' 级 ' + nf.s + '，' + nf.t + ' +1' : '';
+
+    $('yx-res2').innerHTML = [['潜能', R.潜能], ['经验', R.经验], ['金钱', R.金钱], ['食物', R.食物], ['饮水', R.饮水]]
+      .map(function (x) { return 行(x[0], x[1] == null ? 0 : x[1]); }).join('');
+
+    $('yx-her').innerHTML = [
+      ['熟练度', H.熟练度 || '新手'],
+      ['兴奋度', H.兴奋度 == null ? 0 : H.兴奋度],
+      ['世界的裂缝', H.世界的裂缝 == null ? 0 : H.世界的裂缝],
+      ['目的进度', (H.目的进度 == null ? 0 : H.目的进度) + '%']
+    ].map(function (x) { return 行(x[0], x[1]); }).join('');
+
+    var 关系 = (sd.关系 || {})[C.当前女角];
+    $('yx-target').textContent = C.当前女角
+      ? ('正在她这条线上：' + C.当前女角 + (关系 ? '（' + (关系.关系阶段 || '陌生') + ' · 好感 ' + (关系.好感度 || 0) + '）' : ''))
+      : '';
+
+    var F = (sd.局面 || {}).战斗结果;
+    if (F && F.结果) {
+      $('yx-fight').style.display = '';
+      $('yx-fightbody').innerHTML =
+        行(F.结果, F.回合数 + ' 回合') +
+        行('我方', F.我方状态 || '') +
+        行('对方', F.对方状态 || '') +
+        ((F.不可逆 || []).length ? 行('不可逆', F.不可逆.join('、'), 'warn') : '');
+    } else { $('yx-fight').style.display = 'none'; }
+  }
+
+  function 拉取() {
+    try {
+      if (typeof TavernHelper === 'undefined' || !TavernHelper.getVariables) return;
+      Promise.resolve(TavernHelper.getVariables({ type: 'message', message_id: 'latest' }))
+        .then(function (v) { 画(v && v.stat_data); })
+        .catch(function () {});
+    } catch (e) { /* 变量还没生成，等下一轮 */ }
+  }
+  拉取();
+  try {
+    if (typeof eventOn === 'function') {
+      eventOn('message_updated', 拉取);
+      eventOn('message_rendered', 拉取);
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
