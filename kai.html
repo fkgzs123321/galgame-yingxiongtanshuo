@@ -4,55 +4,197 @@
 <head>
 <meta charset="UTF-8">
 <style>
-/* ★ 选人界面：**不带任何 script**
-   2026-09-17 的教训：CDN 里的 script 在酒馆楼层里**不保证被执行**
-   （jQuery .load() 对 HTML 片段走 innerHTML，而 innerHTML 不执行 script）。
-   所以这一份只出 HTML + CSS，八张卡**静态写死**；
-   点击与「确认」由**面板的脚本**接（面板 script 是确定能跑的）。
-   两边靠 data 属性通信：卡片 data-她="温砚"；确认按钮 id="gg4-ok" data-确认="1"。 */
-.gg4{--bg1:#12161f;--bg2:#1a1f2b;--line:#2b3344;--ink:#d8dff0;--dim:#79839c;--gold:#e8b84b;--grn:#6fcf97;
+.gg4{--bg0:#090b0f;--bg1:#12161f;--bg2:#1a1f2b;--line:#2b3344;--ink:#d8dff0;--dim:#79839c;--faint:#4e5769;
+ --gold:#e8b84b;--grn:#6fcf97;--rose:#e07a9a;--blu:#5fa8d0;
  font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--ink);
- max-width:620px;margin:12px auto;padding:2px}
+ max-width:640px;margin:14px auto;padding:2px}
 .gg4 *{box-sizing:border-box}
-.gg4 h3{margin:0 0 3px;font-size:18px;font-weight:700;letter-spacing:.5px}
-.gg4 .sub{font-size:12px;color:var(--dim);margin-bottom:11px;line-height:1.7}
-.gg4 .list{display:grid;gap:7px}
-.gg4 .c{display:grid;grid-template-columns:auto 1fr;gap:11px;align-items:start;padding:10px 12px;border-radius:12px;
- cursor:pointer;transition:.16s;background:linear-gradient(180deg,var(--bg2),var(--bg1));border:1px solid var(--line)}
+.gg4 h3{margin:0 0 4px;font-size:19px;font-weight:700;letter-spacing:.6px;
+ background:linear-gradient(180deg,#fff,#c3cde3);-webkit-background-clip:text;background-clip:text;color:transparent}
+.gg4 .sub{font-size:12px;color:var(--dim);margin-bottom:12px}
+.gg4 .list{display:grid;gap:8px}
+.gg4 .c{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;
+ padding:11px 13px;border-radius:12px;cursor:pointer;transition:.16s;
+ background:linear-gradient(180deg,var(--bg2),var(--bg1));border:1px solid var(--line)}
 .gg4 .c:hover{border-color:#41506b;transform:translateY(-1px)}
-.gg4 .c.on{border-color:var(--gold);box-shadow:0 0 0 1px rgba(232,184,75,.3),0 0 22px -10px rgba(232,184,75,.7)}
-.gg4 .n{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;
- font-size:16px;font-weight:700;background:#0d1119;border:1px solid var(--line);color:var(--gold)}
-.gg4 .t1{font-size:14px;font-weight:600;margin-bottom:2px}
-.gg4 .t2{font-size:11.5px;color:var(--dim);line-height:1.6}
-.gg4 .tag{display:inline-block;font-size:10px;padding:1px 7px;border-radius:999px;margin-left:6px;border:1px solid currentColor;opacity:.8;color:var(--dim)}
-.gg4 .foot{display:flex;gap:9px;align-items:center;margin-top:11px;flex-wrap:wrap}
-.gg4 button{font:inherit;font-size:13px;padding:8px 15px;border-radius:9px;cursor:pointer;transition:.16s;
- background:#1a1f2b;border:1px solid var(--line);color:var(--ink)}
-.gg4 button:hover{border-color:var(--gold);color:var(--gold)}
-.gg4 button.ok{background:linear-gradient(180deg,rgba(232,184,75,.22),rgba(232,184,75,.1));border-color:rgba(232,184,75,.5);color:#f2d79a}
-.gg4 .pick{font-size:12px;color:var(--dim)}
+.gg4 .c[aria-pressed="true"]{border-color:var(--gold);box-shadow:0 0 0 1px rgba(232,184,75,.3),0 0 24px -10px rgba(232,184,75,.7)}
+.gg4 .n{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-size:15px;font-weight:700;
+ background:#1c222e;border:1px solid #2b3341;color:var(--gold);flex:0 0 auto}
+.gg4 .t{font-size:14px;font-weight:600;margin-bottom:3px}
+.gg4 .d{font-size:12px;color:var(--dim);line-height:1.6}
+.gg4 .tag{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:6px;margin-left:6px;
+ background:#1a2029;border:1px solid #262e3a;color:#8d97ab;font-weight:400;vertical-align:1px}
+.gg4 .tag.risk{color:var(--rose);border-color:#4a2632;background:#221318}
+.gg4 .tag.calm{color:var(--grn);border-color:#2b4a37;background:#16221b}
+.gg4 .tag.mid{color:var(--blu);border-color:#2b4a63;background:#16222c}
+.gg4 .ck{width:18px;height:18px;border-radius:50%;border:1px solid #39435a;display:grid;place-items:center;
+ font-size:11px;color:transparent;flex:0 0 auto;margin-top:9px}
+.gg4 .c[aria-pressed="true"] .ck{background:var(--gold);border-color:var(--gold);color:#1a1408;font-weight:700}
+.gg4 .bar{margin-top:13px;display:flex;gap:10px;align-items:center}
+.gg4 .bar button{font:inherit;font-size:13px;font-weight:700;padding:9px 22px;border-radius:10px;cursor:pointer;
+ border:1px solid #7a5a2a;background:linear-gradient(180deg,#4a3a1c,#33280f);color:#f0d29a;transition:.15s;letter-spacing:.5px}
+.gg4 .bar button:hover:not(:disabled){background:linear-gradient(180deg,#5c4722,#3d3013);border-color:#b98a2a;
+ box-shadow:0 0 16px -5px rgba(232,184,75,.7)}
+.gg4 .bar button:disabled{border-color:#262d38;background:#181d24;color:#4a5361;cursor:not-allowed;box-shadow:none}
+.gg4 .hint{font-size:11.5px;color:var(--faint);margin-top:10px;line-height:1.6}
+.gg4 .done{margin-top:12px;padding:9px 12px;border-radius:10px;font-size:12.5px;display:none;
+ border:1px solid rgba(232,184,75,.42);background:rgba(232,184,75,.08);color:#e8c98a}
+.gg4 .done.on{display:block}
 </style>
 </head>
 <body>
-<div class="gg4" id="gg4">
+<!-- 底座_nanpa2 · 开局表单（<OpeningSelectUI/>）
+     依据 skills references/contents-creation/first-message.md:98-110「表单式」：
+       「玩家在表单里选择/填写后，替换脚本（前端界面）负责**生成或发送对应的开场白场景**，再进行后续流程」
+       「表单本身即开局入口，选项决定被发送/触发的开场场景」
+     所以选完必须做两件事：① 写 MVU 变量 ② **触发对应的开场场景**（原先只做了①、没做②） -->
+
+<div class="gg4" id="gg4-root" data-gg4-init="">
   <h3>选一个人来玩你</h3>
   <div class="sub">同一个十四岁，同一个镇口。不一样的是她。<br>选的时候想清楚：她怎么玩，你就怎么过这两年。</div>
-  <div class="list" id="gg4-list">
-    <div class="c" data-她="温砚" onclick="try{window.__选人__&&window.__选人__(&quot;温砚&quot;)}catch(e){}"><div class="n">砚</div><div><div class="t1">温砚<span class="tag">温柔</span><span class="tag">最难</span></div><div class="t2">我要带你走到最好的那个结局。<br>开局前查两小时攻略，点选项前先看你在哪</div></div></div>
-    <div class="c" data-她="丰娆" onclick="try{window.__选人__&&window.__选人__(&quot;丰娆&quot;)}catch(e){}"><div class="n">娆</div><div><div class="t1">丰娆<span class="tag">急躁</span></div><div class="t2">快一点，我不想等。<br>翻得飞快，只挑最近的一条路</div></div></div>
-    <div class="c" data-她="舒晏" onclick="try{window.__选人__&&window.__选人__(&quot;舒晏&quot;)}catch(e){}"><div class="n">晏</div><div><div class="t1">舒晏<span class="tag">玩弄</span><span class="tag">risk</span></div><div class="t2">我想看你能忍到什么时候。<br>故意挑难走的那条，还反复看同一段</div></div></div>
-    <div class="c" data-她="唐响" onclick="try{window.__选人__&&window.__选人__(&quot;唐响&quot;)}catch(e){}"><div class="n">响</div><div><div class="t1">唐响<span class="tag">莽</span><span class="tag">risk</span></div><div class="t2">哪个能打？就它了。<br>不查攻略，先撞上去再说</div></div></div>
-    <div class="c" data-她="沈眠" onclick="try{window.__选人__&&window.__选人__(&quot;沈眠&quot;)}catch(e){}"><div class="n">眠</div><div><div class="t1">沈眠<span class="tag">最静</span></div><div class="t2">你别被谁救走。<br>她点选项的唯一标准是「这会不会让你被救」</div></div></div>
-    <div class="c" data-她="莫漾" onclick="try{window.__选人__&&window.__选人__(&quot;莫漾&quot;)}catch(e){}"><div class="n">漾</div><div><div class="t1">莫漾<span class="tag">挂机</span></div><div class="t2">随便吧，先挂着。<br>手离开鼠标，看着你自己站着</div></div></div>
-    <div class="c" data-她="纪清" onclick="try{window.__选人__&&window.__选人__(&quot;纪清&quot;)}catch(e){}"><div class="n">清</div><div><div class="t1">纪清<span class="tag">全收集</span><span class="tag">risk</span></div><div class="t2">这个数不对。我得先算清楚。<br>她不是在玩，是在把这儿摸透</div></div></div>
-    <div class="c" data-她="郁灼" onclick="try{window.__选人__&&window.__选人__(&quot;郁灼&quot;)}catch(e){}"><div class="n">灼</div><div><div class="t1">郁灼<span class="tag">极端</span><span class="tag">risk</span></div><div class="t2">前面这些都没意思，我要看后面。<br>只挑最刺激的那几段，其余全跳</div></div></div>
+  <div class="list" id="gg4-list"></div>
+  <div class="bar">
+    <button type="button" id="gg4-ok" disabled>确认，开始</button>
+    <span class="hint" id="gg4-pick">还没选</span>
   </div>
-  <div class="foot">
-    <button class="ok" id="gg4-ok" onclick="try{window.__选人定__&&window.__选人定__()}catch(e){}">确认，开始</button>
-    <span class="pick" id="gg4-pick">还没选。点一张卡，再点确认。</span>
-  </div>
+  <div class="done" id="gg4-done"></div>
+  <div class="hint">（八个「她」，八个玩法。选一个，点确认 —— 会切进她的那一局。）</div>
 </div>
+<script>
+ 
+(function () {
+  var NS = 'gg4';
+  var ROOT = document.getElementById(NS + '-root');
+  if (!ROOT || ROOT.getAttribute('data-' + NS + '-init') === '1') return;
+  ROOT.setAttribute('data-' + NS + '-init', '1');
+
+  var 套 = [
+    { k: '温砚', 号: '砚', 句: '我要带你走到最好的那个结局。', 注: '开局前查两小时攻略，点选项前先看你在哪', tag: ['温柔', 'calm'] },
+    { k: '丰娆', 号: '娆', 句: '快一点，我不想等。', 注: '翻得飞快，只挑最近的一条路', tag: ['急躁', 'mid'] },
+    { k: '舒晏', 号: '晏', 句: '我想看你能忍到什么时候。', 注: '故意挑难走的那条，还反复看同一段', tag: ['玩弄', 'risk'] },
+    { k: '唐响', 号: '响', 句: '哪个能打？就它了。', 注: '不查攻略，先撞上去再说', tag: ['莽', 'risk'] },
+    { k: '沈眠', 号: '眠', 句: '你别被谁救走。', 注: '她点选项的唯一标准是「这会不会让你被救」', tag: ['最静', 'calm'] },
+    { k: '莫漾', 号: '漾', 句: '随便吧，先挂着。', 注: '手离开鼠标，看着你自己站着', tag: ['挂机', 'mid'] },
+    { k: '纪清', 号: '清', 句: '这个数不对。我得先算清楚。', 注: '她不是在玩，是在把这儿摸透', tag: ['全收集', 'risk'] },
+    { k: '郁灼', 号: '灼', 句: '前面这些都没意思，我要看后面。', 注: '只挑最刺激的那几段，其余全跳', tag: ['极端', 'risk'] }
+  ];
+  var 选中 = '';
+
+  function allVars() {
+    try { return (typeof getVariables === 'function' ? getVariables({ type: 'chat' }) : {}) || {}; }
+    catch (e) { return {}; }
+  }
+  function walk(o, p) {
+    var q = String(p || '').replace(/^stat_data\./, '').split('.');
+    var c = (o && o.stat_data !== undefined) ? o.stat_data : o;
+    for (var i = 0; i < q.length && c != null; i++) c = c[q[i]];
+    return c;
+  }
+  function get(p, d) { var v = walk(allVars(), p); return v === undefined || v === null ? d : v; }
+  function setLocal(o, p, v) {
+    var q = String(p).replace(/^stat_data\./, '').split('.');
+    if (o.stat_data === undefined) o.stat_data = {};
+    var c = o.stat_data;
+    for (var i = 0; i < q.length - 1; i++) { if (typeof c[q[i]] !== 'object' || c[q[i]] === null) c[q[i]] = {}; c = c[q[i]]; }
+    c[q[q.length - 1]] = v;
+  }
+  function set(p, v) {
+    var full = 'stat_data.' + String(p).replace(/^stat_data\./, '');
+    try { if (typeof updateVariablesWith === 'function') updateVariablesWith(function (x) { x = x || {}; setLocal(x, full, v); return x; }, { type: 'chat' }); } catch (e) {}
+    try {
+      if (typeof updateVariablesWith === 'function' && typeof getCurrentMessageId === 'function')
+        updateVariablesWith(function (x) { x = x || {}; setLocal(x, full, v); return x; }, { type: 'message', message_id: getCurrentMessageId() });
+    } catch (e) {}
+    try { if (typeof triggerSlash === 'function') triggerSlash('/setvar ' + full + ' ' + JSON.stringify(JSON.stringify(v))); } catch (e) {}
+  }
+
+  function render() {
+    var 当前 = String(get('她.人设', '') || '');
+    if (!选中) 选中 = 当前;
+    document.getElementById(NS + '-list').innerHTML = 套.map(function (x) {
+      return '<div class="c" role="button" tabindex="0" aria-pressed="' + (选中 === x.k) + '" data-k="' + x.k + '">'
+        + '<span class="n">' + x.号 + '</span>'
+        + '<span><span class="t">' + x.k + '<span class="tag ' + x.tag[1] + '">' + x.tag[0] + '</span></span>'
+        + '<span class="d">「' + x.句 + '」<br>' + x.注 + '</span></span>'
+        + '<span class="ck">✓</span></div>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('#' + NS + '-list .c'), function (el) {
+      el.addEventListener('click', function () { 选中 = el.getAttribute('data-k'); render(); });
+      el.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); 选中 = el.getAttribute('data-k'); render(); } });
+    });
+    var ok = document.getElementById(NS + '-ok');
+    ok.disabled = !选中;
+    ok.textContent = 选中 ? ('确认「' + 选中 + '」，开始') : '确认，开始';
+    document.getElementById(NS + '-pick').textContent = 选中 ? ('已选 ' + 选中 + '，点确认才生效') : '还没选';
+    if (当前) {
+      var d = document.getElementById(NS + '-done');
+      d.className = 'done on';
+      d.textContent = '已经定了：' + 当前;
+      ok.disabled = true;
+    }
+  }
+
+  // ★ 关键：确认后要「触发对应的开场场景」（skills first-message.md:110）
+  async function 确认() {
+    if (!选中) return;
+    var ok = document.getElementById(NS + '-ok');
+    ok.disabled = true; ok.textContent = '正在开局…';
+
+    // ① 写 MVU 变量
+    set('她.人设', 选中);
+    set('她.目的进度', 0);
+    set('她.已拿到', 0);
+
+    // ② 跳到对应的那段开场白（不是 generate 现编！）
+    // 依据 @types/function/chat_message.d.ts 的示例：
+    //   await setChatMessages([{message_id: 0, swipe_id: 2}])   ← 切到第 2 个 swipe
+    // 本卡的开场白顺序（由 开场白/initvar/N.yaml 的 她.人设 反推）：
+    //   0=说明 1=选人 2=温砚 3=丰娆 4=舒晏 5=唐响 6=沈眠 7=莫漾 8=纪清 9=郁灼
+    //   → swipe_id = 2 + 套的序号。initvar_override 会自动跟着生效
+    var 序 = 0;
+    for (var i = 0; i < 套.length; i++) if (套[i].k === 选中) 序 = i;
+    var swipe_id = 2 + 序;
+    (async function () {
+      try {
+        if (typeof setChatMessages === 'function') {
+          await setChatMessages([{ message_id: 0, swipe_id: swipe_id }]);
+          var d = document.getElementById(NS + '-done');
+          d.className = 'done on';
+          d.textContent = '已确认「' + 选中 + '」，切到它的开局。这条消息往上滑一层就是开局正文。';
+        } else throw new Error('没有 setChatMessages');
+      } catch (e) {
+        // 兜底：切不了 swipe 时，退回让 AI 按这套人设开始
+        try {
+          if (typeof generate === 'function') {
+            generate({ user_input: '【开局】屏幕外的她选了「' + 选中 + '」这一套。按这一套人设开始第一天。', should_stream: true });
+            var d2 = document.getElementById(NS + '-done');
+            d2.className = 'done on';
+            d2.textContent = '已确认「' + 选中 + '」，由她开第一局。';
+            return;
+          }
+        } catch (e2) {}
+        var d3 = document.getElementById(NS + '-done');
+        d3.className = 'done on';
+        d3.textContent = '变量已写入，但没能自动跳转（' + e.message + '）。请手动切开场白到「' + 选中 + '」那一段。';
+      }
+      var ok2 = document.getElementById(NS + '-ok');
+      ok2.disabled = true;
+    })();
+  }
+
+  document.getElementById(NS + '-ok').addEventListener('click', 确认);
+  render();
+  try {
+    var ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
+    if (ctx && ctx.eventSource && ctx.eventTypes) {
+      [ctx.eventTypes.MESSAGE_UPDATED, ctx.eventTypes.CHAT_CHANGED].forEach(function (t) {
+        if (t) ctx.eventSource.on(t, function () { try { render(); } catch (e) {} });
+      });
+    }
+  } catch (e) {}
+})();
+ 
+</script>
 </body>
 </html>
 ```
