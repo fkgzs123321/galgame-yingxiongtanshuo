@@ -135,53 +135,74 @@
   }
 
   // ★ 关键：确认后要「触发对应的开场场景」（skills first-message.md:110）
+  // ★ 2026-09-17 重写：加了「每步报出来 + 验证是否真的切了 + 不行就 generate 兜底」
+  //   原因：setChatMessages 可能**静默失败**（不抛错也不生效），原来走不到兜底分支，
+  //   用户看到的就是「点了确认，什么都没发生」。
+  function 报(话, 类) {
+    var d = document.getElementById(NS + "-done");
+    if (!d) return;
+    d.className = "done on" + (类 ? " " + 类 : "");
+    d.textContent = 话;
+  }
+
   async function 确认() {
     if (!选中) return;
-    var ok = document.getElementById(NS + '-ok');
-    ok.disabled = true; ok.textContent = '正在开局…';
+    var ok = document.getElementById(NS + "-ok");
+    ok.disabled = true; ok.textContent = "正在开局…";
 
-    // ① 写 MVU 变量
-    set('她.人设', 选中);
-    set('她.目的进度', 0);
-    set('她.已拿到', 0);
-
-    // ② 跳到对应的那段开场白（不是 generate 现编！）
-    // 依据 @types/function/chat_message.d.ts 的示例：
-    //   await setChatMessages([{message_id: 0, swipe_id: 2}])   ← 切到第 2 个 swipe
-    // 本卡的开场白顺序（由 开场白/initvar/N.yaml 的 她.人设 反推）：
-    //   0=说明 1=选人 2=温砚 3=丰娆 4=舒晏 5=唐响 6=沈眠 7=莫漾 8=纪清 9=郁灼
-    //   → swipe_id = 2 + 套的序号。initvar_override 会自动跟着生效
     var 序 = 0;
     for (var i = 0; i < 套.length; i++) if (套[i].k === 选中) 序 = i;
     var swipe_id = 2 + 序;
-    (async function () {
-      try {
-        if (typeof setChatMessages === 'function') {
-          await setChatMessages([{ message_id: 0, swipe_id: swipe_id }]);
-          var d = document.getElementById(NS + '-done');
-          d.className = 'done on';
-          d.textContent = '已确认「' + 选中 + '」，切到它的开局。这条消息往上滑一层就是开局正文。';
-        } else throw new Error('没有 setChatMessages');
-      } catch (e) {
-        // 兜底：切不了 swipe 时，退回让 AI 按这套人设开始
-        try {
-          if (typeof generate === 'function') {
-            generate({ user_input: '【开局】屏幕外的她选了「' + 选中 + '」这一套。按这一套人设开始第一天。', should_stream: true });
-            var d2 = document.getElementById(NS + '-done');
-            d2.className = 'done on';
-            d2.textContent = '已确认「' + 选中 + '」，由她开第一局。';
-            return;
-          }
-        } catch (e2) {}
-        var d3 = document.getElementById(NS + '-done');
-        d3.className = 'done on';
-        d3.textContent = '变量已写入，但没能自动跳转（' + e.message + '）。请手动切开场白到「' + 选中 + '」那一段。';
-      }
-      var ok2 = document.getElementById(NS + '-ok');
-      ok2.disabled = true;
-    })();
-  }
+    报("① 正在写变量（她 = " + 选中 + "）…");
 
+    // ① 写变量
+    set("她.人设", 选中);
+    set("她.目的进度", 0);
+    set("她.已拿到", 0);
+    报("② 变量已写。正在切到第 " + swipe_id + " 段开场白…");
+
+    // ② 切 swipe，然后**验证真的切了**
+    var 切成了 = false, 切层原因 = "";
+    try {
+      if (typeof setChatMessages !== "function") throw new Error("这个环境没有 setChatMessages");
+      await setChatMessages([{ message_id: 0, swipe_id: swipe_id }]);
+      // 验证：读回来看看现在停在第几个 swipe
+      try {
+        if (typeof getChatMessages === "function") {
+          var 回 = getChatMessages(0, { include_swipes: false });
+          var 条 = Array.isArray(回) ? 回[0] : 回;
+          var 现在 = 条 && (条.swipe_id !== undefined ? 条.swipe_id : null);
+          if (现在 === swipe_id) 切成了 = true;
+          else if (现在 === null) 切成了 = true;   // 读不到就当作切了（避免误判）
+          报("③ 切层返回。现在 swipe = " + 现在 + "（目标 " + swipe_id + "）");
+        } else 切成了 = true;
+      } catch (e2) { 切成了 = true; }   // 验证失败不当作切层失败
+    } catch (e) {
+      切层原因 = (e && e.message ? e.message : String(e));
+      报("③ 切层失败：" + 切层原因 + "。改用让 AI 直接开始…");
+    }
+
+    if (切成了) {
+      报("✅ 已确认「" + 选中 + "」。这条消息往上滑一层就是她的开局正文。");
+      return;
+    }
+
+    // ③ 兜底：让 AI 按这套人设直接开始下一楼
+    try {
+      if (typeof generate !== "function") throw new Error("这个环境没有 generate");
+      报("④ 正在让 AI 按「" + 选中 + "」这套开始第一局…");
+      await generate({
+        user_input: "【开局】屏幕外的她选了「" + 选中 + "」这一套。"
+          + "按这一套人设、从第一天开始，写第一层正文（四段结构：她点了什么 → 你的反应 → 这件事做完 → 新的四条选项）。"
+          + "写完后照常输出 <UpdateVariable> 与末尾的 <StatusPlaceHolderImpl/>。",
+        should_stream: true,
+      });
+      报("✅ 已确认「" + 选中 + "」，她开第一局了。");
+    } catch (e3) {
+      报("✗ 两条路都没走通：切层不行（" + 切层原因 + "），AI 也不行（" + (e3 && e3.message ? e3.message : e3) + "）。"
+         + "请手动切开场白到「" + 选中 + "」那一段。");
+    }
+  }
   document.getElementById(NS + '-ok').addEventListener('click', 确认);
   render();
   try {
